@@ -920,7 +920,7 @@ body { background: #fff; color: #000; }
 <div class="user-footer">
 <div class="user-avatar" id="userAvatar" aria-hidden="true">GG</div>
 <div class="user-info">
-<div class="user-name" id="userName">Gabriel Gonçalves</div>
+<div class="user-name" id="userName"></div>
 <button class="btn-sair" id="btnSair">Sair da conta</button>
 </div>
 </div>
@@ -931,7 +931,7 @@ body { background: #fff; color: #000; }
 <!-- Topo global com saudação personalizada e seletor de mês -->
 <div class="global-header no-print">
 <div>
-<div style="font-size:1.15rem; font-weight:700;" id="saudacao">Olá, Gabriel Gonçalves</div>
+<div style="font-size:1.15rem; font-weight:700;" id="saudacao">Olá!</div>
 <div class="small muted">Seu painel financeiro pessoal</div>
 </div>
 <div class="month-picker-wrap">
@@ -1151,7 +1151,7 @@ body { background: #fff; color: #000; }
 </div>
 <div class="num">•••• •••• •••• ••••</div>
 <div style="display:flex; justify-content:space-between; font-size:0.85rem;">
-<span>Titular: Gabriel Gonçalves</span>
+<span id="cartTitular">Titular</span>
 <span id="cartMesLabel">Fatura do mês</span>
 </div>
 </div>
@@ -1880,9 +1880,10 @@ $('#loginErro').textContent = erro || '';
 
 function preencherUsuario(user) {
 const meta = user.user_metadata || {};
-const nome = meta.full_name || meta.name || 'Gabriel Gonçalves';
+const nome = meta.full_name || meta.name || (user.email || 'Usuário').split('@')[0];
 const iniciais = nome.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('');
 $('#userName').textContent = nome;
+$('#cartTitular').textContent = 'Titular: ' + nome;
 $('#saudacao').textContent = 'Olá, ' + nome.split(/\s+/)[0];
 $('#configConta').textContent = 'Conectado como ' + (user.email || nome) + '.';
 const av = $('#userAvatar');

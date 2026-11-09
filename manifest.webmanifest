@@ -1,7 +1,7 @@
 {
   "name": "Minhas Finanças",
   "short_name": "Finanças",
-  "description": "Controle financeiro pessoal de Gabriel Gonçalves, sincronizado entre celular e computador.",
+  "description": "Controle financeiro pessoal, sincronizado entre celular e computador.",
   "lang": "pt-BR",
   "start_url": "./",
   "scope": "./",
