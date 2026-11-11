@@ -3,7 +3,7 @@
      e usa a cópia guardada quando estiver offline.
    - Bibliotecas e fontes externas: usa a cópia guardada e atualiza em segundo plano.
    - Chamadas ao Supabase (dados e login) nunca são guardadas. */
-const VERSAO = 'financas-v3';
+const VERSAO = 'financas-v4';
 const ARQUIVOS = [
   './',
   './index.html',

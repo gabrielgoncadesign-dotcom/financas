@@ -1186,6 +1186,14 @@ body { background: #fff; color: #000; }
 <div class="actions" style="margin-top:10px;">
 <button class="btn ghost sm" id="btnSalvarLimite">Salvar limite</button>
 </div>
+<div class="field" style="margin-top:14px;">
+<label for="cartFechamentoInput">Dia de fechamento da fatura</label>
+<input class="input" id="cartFechamentoInput" type="number" min="1" max="31" placeholder="Ex.: 9">
+<div class="helper">Compras feitas a partir desse dia entram na fatura do mês seguinte.</div>
+</div>
+<div class="actions" style="margin-top:10px;">
+<button class="btn ghost sm" id="btnSalvarFechamento">Salvar fechamento</button>
+</div>
 </div>
 </div>
 <div class="box" style="margin-bottom:18px;">
@@ -1704,6 +1712,15 @@ const mesKeyStr = Math.floor(idx / 12) + '-' + pad(idx % 12 + 1);
 if (mesKeyStr > MESES_DISPONIVEIS[MESES_DISPONIVEIS.length - 1]) fora++;
 }
 return fora;
+}
+
+function mesFaturaDaCompra(dataISO) {
+// Com dia de fechamento: compras a partir desse dia vão para a fatura do mês seguinte
+const [a, m, d] = dataISO.split('-').map(Number);
+const fech = Number(dados && dados.cartao && dados.cartao.fechamento) || 0;
+let idx = a * 12 + (m - 1);
+if (fech && d >= fech) idx += 1;
+return Math.floor(idx / 12) + '-' + pad(idx % 12 + 1);
 }
 
 function parcelasAnteriores(compra) {
@@ -2904,6 +2921,8 @@ const dataIn = $('#pDataCompra');
 if (modo === 'parcelada') { dataIn.min = MESES_ANTERIORES[0] + '-01'; dataIn.max = '2027-12-31'; }
 else { dataIn.min = '2026-11-01'; dataIn.max = '2027-12-31'; }
 $('#pDataDica').style.display = modo === 'parcelada' ? '' : 'none';
+const fech = Number(dados.cartao && dados.cartao.fechamento) || 0;
+$('#pDataDica').textContent = 'Pode ser uma data anterior a nov/2026.' + (fech ? ' A 1ª parcela é calculada pelo fechamento (dia ' + fech + ').' : ' Dica: informe o dia de fechamento da fatura na tela do Cartão.');
 atualizarBotoesAssin();
 atualizarPreviewParc();
 }
@@ -3151,6 +3170,7 @@ $('#cartPct').textContent = (pct * 100).toLocaleString('pt-BR', { maximumFractio
 $('#cartBar').style.width = (pct * 100) + '%';
 $('#cartBar').style.background = pct >= 1 ? 'var(--bad)' : pct >= 0.8 ? '#f5b041' : '#93c5fd';
 $('#cartLimiteInput').value = limite || '';
+$('#cartFechamentoInput').value = dados.cartao.fechamento || '';
 renderParcelados();
 
 const todasCompras = [...comprasMes, ...fixasCredito.map(f => ({
@@ -3601,7 +3621,7 @@ $('#pMes').addEventListener('change', atualizarPreviewParc);
 $('#pDataCompra').addEventListener('change', () => {
 const d = $('#pDataCompra').value;
 if (modoForm === 'parcelada' && d) {
-const mk = d.slice(0, 7);
+const mk = mesFaturaDaCompra(d);
 if ([...$('#pMes').options].some(o => o.value === mk)) $('#pMes').value = mk;
 atualizarPreviewParc();
 }
@@ -3648,6 +3668,16 @@ toast('Compra parcelada excluída.', 'ok');
 renderTudo();
 });
 }
+});
+$('#btnSalvarFechamento').addEventListener('click', () => {
+const raw = $('#cartFechamentoInput').value.trim();
+if (raw === '') { dados.cartao.fechamento = null; salvar(); toast('Dia de fechamento removido.', 'ok'); renderCartao(); return; }
+const v = parseInt(raw, 10);
+if (!(v >= 1 && v <= 31)) { toast('Informe um dia entre 1 e 31.', 'erro'); return; }
+dados.cartao.fechamento = v;
+salvar();
+toast('Fatura fecha todo dia ' + v + '.', 'ok');
+renderCartao();
 });
 $('#btnSalvarLimite').addEventListener('click', () => {
 const v = parseFloat($('#cartLimiteInput').value);
