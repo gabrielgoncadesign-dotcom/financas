@@ -1378,6 +1378,7 @@ body { background: #fff; color: #000; }
 <div class="field" id="campoDataCompra">
 <label for="pDataCompra">Data da compra *</label>
 <input class="input" id="pDataCompra" type="date" min="2026-11-01" max="2027-12-31">
+<span class="small muted" id="pDataDica" style="display:none;">Pode ser uma data anterior a nov/2026.</span>
 </div>
 <div class="field" id="campoStatus">
 <label for="pStatus">Status</label>
@@ -1557,6 +1558,15 @@ const MESES_DISPONIVEIS = [
 '2027-07', '2027-08', '2027-09', '2027-10', '2027-11', '2027-12'
 ];
 const MES_PADRAO = '2026-11';
+const PRIMEIRO_MES = MESES_DISPONIVEIS[0];
+// Meses anteriores ao período do app, para compras parceladas feitas antes (até 48 meses)
+const MESES_ANTERIORES = (() => {
+const [a, m] = PRIMEIRO_MES.split('-').map(Number);
+const base = a * 12 + (m - 1);
+const out = [];
+for (let i = 48; i >= 1; i--) { const idx = base - i; out.push(Math.floor(idx / 12) + '-' + String(idx % 12 + 1).padStart(2, '0')); }
+return out;
+})();
 
 /* ---------- Utilitários ---------- */
 const $ = (sel) => document.querySelector(sel);
@@ -1685,14 +1695,28 @@ return out;
 }
 
 function parcelasForaPeriodo(compra) {
+// Só as que caem DEPOIS do período (as anteriores já passaram)
 const [a0, m0] = compra.mesInicial.split('-').map(Number);
 let fora = 0;
 for (let i = 0; i < compra.numParcelas; i++) {
 const idx = (a0 * 12 + (m0 - 1)) + i;
 const mesKeyStr = Math.floor(idx / 12) + '-' + pad(idx % 12 + 1);
-if (!MESES_DISPONIVEIS.includes(mesKeyStr)) fora++;
+if (mesKeyStr > MESES_DISPONIVEIS[MESES_DISPONIVEIS.length - 1]) fora++;
 }
 return fora;
+}
+
+function parcelasAnteriores(compra) {
+// Parcelas que venceram antes do período do app: consideradas já pagas
+if (compra.tipo === 'assinatura' || !compra.numParcelas) return 0;
+const [a0, m0] = compra.mesInicial.split('-').map(Number);
+let n = 0;
+for (let i = 0; i < compra.numParcelas; i++) {
+const idx = (a0 * 12 + (m0 - 1)) + i;
+const mesKeyStr = Math.floor(idx / 12) + '-' + pad(idx % 12 + 1);
+if (mesKeyStr < PRIMEIRO_MES) n++;
+}
+return n;
 }
 
 function parcelasDoMesCompra(mesKeyStr) {
@@ -2838,7 +2862,8 @@ ${ativa ? '<button class="btn ghost sm" data-act="encerrarAssin">Encerrar assina
 </div>`;
 }
 const total = c.numParcelas;
-const pagasN = c.parcelas.filter(p => p.status === 'pago').length;
+const anteriores = parcelasAnteriores(c);
+const pagasN = c.parcelas.filter(p => p.status === 'pago').length + anteriores;
 const pct = total ? (pagasN / total) * 100 : 0;
 const fora = parcelasForaPeriodo(c);
 const cat = catPorId(c.categoriaId);
@@ -2851,7 +2876,8 @@ return `<div class="cat-card" style="--c:${cat.cor}; margin-bottom:12px;" data-c
 <div><strong>${escapeHtml(c.nome)}</strong> <span class="small muted">${cat.emoji} ${escapeHtml(cat.nome)}${c.cartao ? ' · ' + escapeHtml(c.cartao) : ''}</span></div>
 <div class="small">Total ${fmtMoeda(c.valorTotal)}</div>
 </div>
-<div class="small muted">Parcela ${Math.min(parcelaAtual, total)} de ${total} · ${fmtMoeda(valorParc)} por parcela · ${primeira} até ${ultima}</div>
+<div class="small muted">${pagasN >= total ? 'Quitada' : 'Parcela ' + Math.min(parcelaAtual, total) + ' de ' + total} · ${fmtMoeda(valorParc)} por parcela · ${primeira} até ${ultima}</div>
+${anteriores > 0 ? `<div class="small muted">Comprada${c.dataCompra ? ' em ' + fmtData(c.dataCompra) : ''} · ${anteriores} parcela(s) antes de ${labelMesCurto(PRIMEIRO_MES)} já contada(s) como paga(s)</div>` : ''}
 <div class="progress"><div style="width:${pct}%;"></div></div>
 ${fora > 0 ? `<div class="alert-line warn">Restam ${fora} parcela(s) fora do período (após dez/2027).</div>` : ''}
 ${c.observacao ? `<div class="small muted">${escapeHtml(c.observacao)}</div>` : ''}
@@ -2874,6 +2900,10 @@ $('#campoMesParc').style.display = modo === 'parcelada' ? '' : 'none';
 $('#campoMesAssin').style.display = modo === 'assinatura' ? '' : 'none';
 $('#campoStatus').style.display = modo === 'avista' ? '' : 'none';
 $('#campoDataCompra').style.display = modo === 'assinatura' ? 'none' : '';
+const dataIn = $('#pDataCompra');
+if (modo === 'parcelada') { dataIn.min = MESES_ANTERIORES[0] + '-01'; dataIn.max = '2027-12-31'; }
+else { dataIn.min = '2026-11-01'; dataIn.max = '2027-12-31'; }
+$('#pDataDica').style.display = modo === 'parcelada' ? '' : 'none';
 atualizarBotoesAssin();
 atualizarPreviewParc();
 }
@@ -2903,16 +2933,19 @@ if (!(valor > 0) || !(n >= 2 && n <= 48) || !mes) { el.textContent = 'Preencha v
 const tmp = { valorTotal: valor, numParcelas: n, mesInicial: mes };
 const ps = gerarParcelas(tmp);
 const fora = parcelasForaPeriodo(tmp);
+const antes = parcelasAnteriores(tmp);
 const base = Math.floor(Math.round(valor * 100) / n) / 100;
 const ultimo = ps.length ? ps[ps.length - 1] : null;
 const [a0, m0] = mes.split('-').map(Number);
 const idxF = (a0 * 12 + (m0 - 1)) + (n - 1);
 const finalKey = Math.floor(idxF / 12) + '-' + pad(idxF % 12 + 1);
-el.textContent = `${n}x de ${fmtMoeda(base)}${ultimo && ultimo.valor !== base ? ' (última ' + fmtMoeda(ultimo.valor) + ')' : ''} — de ${labelMesCurto(mes)} até ${labelMesCurto(finalKey)}${fora ? ' · ' + fora + ' fora do período' : ''}`;
+el.textContent = `${n}x de ${fmtMoeda(base)}${ultimo && ultimo.valor !== base ? ' (última ' + fmtMoeda(ultimo.valor) + ')' : ''} — de ${labelMesCurto(mes)} até ${labelMesCurto(finalKey)}${antes ? ' · ' + antes + ' já paga(s) antes de ' + labelMesCurto(PRIMEIRO_MES) : ''}${fora ? ' · ' + fora + ' após dez/27' : ''}${antes >= n ? ' · todas já pagas' : ''}`;
 }
 
 function popularParcSelects() {
-$('#pMes').innerHTML = MESES_DISPONIVEIS.map(m => `<option value="${m}">${labelMes(m)}</option>`).join('');
+$('#pMes').innerHTML =
+'<optgroup label="Meses anteriores">' + MESES_ANTERIORES.map(m => `<option value="${m}">${labelMes(m)}</option>`).join('') + '</optgroup>' +
+'<optgroup label="Período do app">' + MESES_DISPONIVEIS.map(m => `<option value="${m}">${labelMes(m)}</option>`).join('') + '</optgroup>';
 $('#pMesAssin').innerHTML = MESES_DISPONIVEIS.map(m => `<option value="${m}">${labelMes(m)}</option>`).join('');
 const sel = $('#pCat');
 const atual = sel.value;
@@ -2948,7 +2981,7 @@ $('#pCat').value = c.categoriaId;
 $('#pNum').value = c.numParcelas || 2;
 $('#pMes').value = c.mesInicial;
 $('#pMesAssin').value = c.mesInicial;
-$('#pDataCompra').value = c.mesInicial + '-05';
+$('#pDataCompra').value = c.dataCompra || (c.mesInicial + '-05');
 $('#pStatus').value = 'pago';
 $('#dlgCompraTitulo').textContent = 'Editar compra';
 $('#btnSalvarParc').textContent = 'Salvar alterações';
@@ -2973,7 +3006,6 @@ pagas.forEach(pa => {
 if (!finais.some(f => f.mes === pa.mes)) finais.push({ ...pa });
 });
 finais.sort((a, b) => a.mes.localeCompare(b.mes));
-finais.forEach((p, i) => { p.numero = i + 1; });
 return finais;
 }
 
@@ -3010,17 +3042,19 @@ toast('Compra à vista salva.', 'ok');
 const n = parseInt($('#pNum').value, 10);
 const mes = $('#pMes').value;
 if (!(n >= 2 && n <= 48)) return erro('O número de parcelas deve ser entre 2 e 48.');
-if (!MESES_DISPONIVEIS.includes(mes)) return erro('Escolha o mês da primeira parcela.');
+if (!MESES_DISPONIVEIS.includes(mes) && !MESES_ANTERIORES.includes(mes)) return erro('Escolha o mês da primeira parcela.');
+const dataCompra = $('#pDataCompra').value || null;
+if (dataCompra && dataCompra.slice(0, 7) > mes) return erro('A 1ª parcela não pode ser antes da data da compra.');
 if (c && c.tipo === 'assinatura') {
 dados.parcelados = dados.parcelados.filter(x => x.id !== c.id);
 c = null;
 }
 if (c) {
-Object.assign(c, { nome, valorTotal: valor, numParcelas: n, mesInicial: mes, categoriaId: cat, tipo: 'parcelada' });
+Object.assign(c, { nome, valorTotal: valor, numParcelas: n, mesInicial: mes, dataCompra, categoriaId: cat, tipo: 'parcelada' });
 c.parcelas = reconstruirParcelas(c);
 toast('Compra parcelada atualizada. Parcelas pendentes recalculadas.', 'ok');
 } else {
-const nova = { id: gerarId(), nome, valorTotal: valor, numParcelas: n, mesInicial: mes, cartao, categoriaId: cat, observacao: obs, tipo: 'parcelada', parcelas: [] };
+const nova = { id: gerarId(), nome, valorTotal: valor, numParcelas: n, mesInicial: mes, dataCompra, cartao, categoriaId: cat, observacao: obs, tipo: 'parcelada', parcelas: [] };
 nova.parcelas = gerarParcelas(nova);
 dados.parcelados.push(nova);
 toast('Compra parcelada adicionada.', 'ok');
@@ -3564,6 +3598,14 @@ $('#btnNovaCompraCartao2').addEventListener('click', abrirCompraCartao);
 $$('#dlgCompra .seg button').forEach(b => b.addEventListener('click', () => setModoForm(b.dataset.modo)));
 ['#pNome', '#pValor', '#pNum', '#pMes', '#pMesAssin', '#pCat', '#pDataCompra', '#pStatus'].forEach(s => $(s).addEventListener('input', atualizarPreviewParc));
 $('#pMes').addEventListener('change', atualizarPreviewParc);
+$('#pDataCompra').addEventListener('change', () => {
+const d = $('#pDataCompra').value;
+if (modoForm === 'parcelada' && d) {
+const mk = d.slice(0, 7);
+if ([...$('#pMes').options].some(o => o.value === mk)) $('#pMes').value = mk;
+atualizarPreviewParc();
+}
+});
 $('#pMesAssin').addEventListener('change', atualizarPreviewParc);
 $('#btnEncerrarAssin').addEventListener('click', () => { if (parcEditId) encerrarAssinatura(parcEditId); });
 $('#btnReativarAssin').addEventListener('click', () => { if (parcEditId) reativarAssinatura(parcEditId); });
